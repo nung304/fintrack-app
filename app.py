@@ -7,7 +7,7 @@ import pandas as pd
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ iPhone
 st.set_page_config(page_title="FinTrack Ticker", page_icon="📈", layout="centered")
 
-# 🎯 เสริม CSS สไตล์กระดานหุ้นไทย (ตัววิ่งภาษาไทย รองรับ Font สบายตา)
+# 🎯 เสริม CSS สไตล์กระดานหุ้นไทย (ตัววิ่งภาษาไทย วนลูปต่อเนื่องไร้รอยต่อ Seamless Loop)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap');
@@ -16,24 +16,29 @@ st.markdown("""
         font-family: 'IBM Plex Sans Thai', sans-serif !important;
     }
 
-    /* แอนิเมชันสำหรับข้อความวิ่งแบบกระดานหุ้น */
-    @keyframes ticker {
-        0% { transform: translate3d(100%, 0, 0); }
-        100% { transform: translate3d(-100%, 0, 0); }
+    /* แอนิเมชันสำหรับข้อความวิ่งวนลูปต่อเนื่อง */
+    @keyframes ticker-infinite {
+        0% { transform: translate3d(0, 0, 0); }
+        100% { transform: translate3d(-50%, 0, 0); }
     }
     
     .main { background-color: #0b0e14; }
     
-    /* แถบวิ่งกระดานหุ้นด้านบนสุด */
+    /* แถบกระดานหุ้นแบบวนต่อเนื่อง */
     .ticker-wrap {
         width: 100%; background-color: #161a25;
         overflow: hidden; padding: 10px 0;
         border-bottom: 2px solid #232936; margin-bottom: 20px;
         border-radius: 8px;
+        display: flex;
     }
-    .ticker-move {
-        display: inline-block; white-space: nowrap;
-        animation: ticker 25s linear infinite;
+    
+    /* กล่องข้อความแฝดที่วิ่งต่อท้ายกันตลอดเวลา */
+    .ticker-content {
+        display: inline-block;
+        white-space: nowrap;
+        padding-right: 50px;
+        animation: ticker-infinite 30s linear infinite;
         font-weight: 600; font-size: 15px;
     }
     
@@ -142,14 +147,18 @@ def get_past_descriptions():
 # 4. ส่วนคำนวณเงินและจัดฟอร์แมตข้อมูล
 bank_balance, daily_wallet, current_savings, start_date_str = calculate_finances()
 
-# 📈 ปรับข้อความแถววิ่งด้านบนเป็นภาษาไทยแบบกระดานหุ้นด่วน
+# 📈 จัดคำข้อความวิ่งภาษาไทยให้สวยงาม
 daily_status = f"▲ คงเหลือ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ ติดลบ {daily_wallet:,.2f}"
-ticker_text = f"• กระเป๋ารายวันสะสม: {daily_status} บาท  • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f}  • ยอดเงินเก็บออม: ฿{current_savings:,.2f}  • สถานะระบบ: เปิดทำงานปกติ 🟢"
+single_ticker = f"• กระเป๋ารายวันสะสม: {daily_status} บาท &nbsp;&nbsp;&nbsp;&nbsp; • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • ยอดเงินเก็บออม: ฿{current_savings:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • สถานะระบบ: เปิดทำงานปกติ 🟢 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
 
+# 🎯 ปล่อยข้อความวิ่งแบบ 2 กล่องประกบกัน เพื่อให้วิ่งเวียนต่อกันไปแบบไร้ช่องว่างยาวๆ (Seamless Loop)
 st.markdown(f"""
     <div class="ticker-wrap">
-        <div class="ticker-move">
-            <span class="{ 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">{ticker_text} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_text}</span>
+        <div class="ticker-content { 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">
+            {single_ticker} {single_ticker}
+        </div>
+        <div class="ticker-content { 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">
+            {single_ticker} {single_ticker}
         </div>
     </div>
 """, unsafe_allow_html=True)
