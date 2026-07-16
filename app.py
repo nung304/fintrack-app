@@ -17,12 +17,12 @@ db = firestore.client()
 
 # 3. ฟังก์ชันจัดการข้อมูล (NoSQL Firestore API)
 def init_account():
-    """สร้างยอดเงินเริ่มต้นในคอลเลกชัน account (ถ้ายังไม่มี)"""
+    """สร้างยอดเงินเริ่มต้นเป็น 0.0 ในคอลเลกชัน account (ถ้ายังไม่มี)"""
     doc_ref = db.collection("account").document("main_wallet")
     if not doc_ref.get().exists:
         doc_ref.set({
-            "current_bank_balance": 25000.0,
-            "savings": 5000.0
+            "current_bank_balance": 0.0,
+            "savings": 0.0
         })
 
 init_account()
@@ -31,15 +31,41 @@ def get_account_data():
     data = db.collection("account").document("main_wallet").get().to_dict()
     return data["current_bank_balance"], data["savings"]
 
-def update_bank_balance(amount, is_income=False):
-    current_balance, _ = get_account_data()
-    new_balance = current_balance + amount if is_income else current_balance - amount
+def update_bank_balance(amount, is_income=True):
+    """อัปเดตยอดเงินในบัญชีปัจจุบัน (บวกเข้า หรือ หักออก)"""
+    current_balance, current_savings = get_account_data()
+    if is_income:
+        new_balance = current_balance + amount
+    else:
+        new_balance = current_balance - amount
     db.collection("account").document("main_wallet").update({"current_bank_balance": new_balance})
+
+def update_savings_balance(amount, is_deposit=True):
+    """อัปเดตยอดเงินเก็บ (ฝากเพิ่ม หรือ ถอนออก)"""
+    current_balance, current_savings = get_account_data()
+    if is_deposit:
+        # ฝากเงินเก็บ: หักจากบัญชีหลัก ไปบวกเข้าเงินเก็บ
+        if current_balance >= amount:
+            db.collection("account").document("main_wallet").update({
+                "current_bank_balance": current_balance - amount,
+                "savings": current_savings + amount
+            })
+            return True
+        return False
+    else:
+        # ถอนเงินเก็บ: หักจากเงินเก็บ กลับเข้าบัญชีหลัก
+        if current_savings >= amount:
+            db.collection("account").document("main_wallet").update({
+                "current_bank_balance": current_balance + amount,
+                "savings": current_savings - amount
+            })
+            return True
+        return False
 
 def calculate_daily_wallet():
     """ลอจิกคำนวณเงินโควตารายวันทบยอด"""
     today = datetime.now()
-    days_passed = today.day # นับวันของเดือนปัจจุบัน เช่น วันที่ 16
+    days_passed = today.day # นับวันของเดือนปัจจุบัน
     total_allowance = days_passed * 100
     
     current_month = today.strftime('%m')
@@ -73,12 +99,12 @@ st.markdown("---")
 
 # 5. ส่วนฟอร์มบันทึกข้อมูล
 st.subheader("➕ บันทึกรายการใหม่")
-tab1, tab2 = st.tabs(["🛒 รายจ่ายรายวัน (งบ 100)", "💳 หักบัญชีหลักโดยตรง"])
+tab1, tab2, tab3 = st.tabs(["🛒 รายจ่ายรายวัน (งบ 100)", "💳 หักบัญชีหลักโดยตรง", "💰 บันทึกรายรับ/เงินเก็บ"])
 
 with tab1:
     with st.form("daily_form", clear_on_submit=True):
         desc = st.text_input("รายละเอียดรายการ", placeholder="เช่น ค่าข้าวเช้า, กาแฟ")
-        amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0)
+        amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key="daily_amt")
         submit_daily = st.form_submit_button("💾 บันทึกรายวัน")
         if submit_daily and desc and amount > 0:
             today_str = datetime.now().strftime('%Y-%m-%d')
@@ -93,29 +119,58 @@ with tab1:
 
 with tab2:
     with st.form("direct_form", clear_on_submit=True):
-        category = st.selectbox("ประเภทค่าใช้จ่ายรายเดือน", ["ค่าน้ำมัน", "ค่าเน็ต", "ค่าผ่อนของ", "ให้แฟน", "เติมเงินเข้าระบบ"])
-        amount_direct = st.number_input("จำนวนเงินที่จ่ายจริง (บาท)", min_value=0.0, step=1.0)
+        category = st.selectbox("ประเภทค่าใช้จ่ายรายเดือน", ["ค่าน้ำมัน", "ค่าเน็ต", "ค่าผ่อนของ", "ให้แฟน"])
+        amount_direct = st.number_input("จำนวนเงินที่จ่ายจริง (บาท)", min_value=0.0, step=1.0, key="direct_amt")
         note = st.text_input("บันทึกย่อ (ถ้ามี)", placeholder="เช่น ปั๊ม ปตท., งวด 3/12")
         submit_direct = st.form_submit_button("💳 บันทึกหักบัญชีหลัก")
         if submit_direct and amount_direct > 0:
             today_str = datetime.now().strftime('%Y-%m-%d')
-            
-            if category == "เติมเงินเข้าระบบ":
-                update_bank_balance(amount_direct, is_income=True)
-                st.success(f"เติมเงินเข้าบัญชีหลัก ฿{amount_direct} เรียบร้อย!")
-            else:
-                db.collection("direct_transactions").add({
-                    "date": today_str,
-                    "category": category,
-                    "amount": amount_direct,
-                    "note": note,
-                    "timestamp": firestore.SERVER_TIMESTAMP
-                })
-                update_bank_balance(amount_direct, is_income=False)
-                st.success(f"บันทึกการจ่าย {category} ฿{amount_direct} เรียบร้อย!")
+            db.collection("direct_transactions").add({
+                "date": today_str,
+                "category": category,
+                "amount": amount_direct,
+                "note": note,
+                "timestamp": firestore.SERVER_TIMESTAMP
+            })
+            update_bank_balance(amount_direct, is_income=False)
+            st.success(f"บันทึกการจ่าย {category} ฿{amount_direct} เรียบร้อย!")
             st.rerun()
 
-# 6. ส่วนการแสดงประวัติรายการเดือนนี้
+with tab3:
+    with st.form("income_form", clear_on_submit=True):
+        income_type = st.selectbox("ประเภทรายการเงินเข้า", ["เงินเดือน/รายรับหลัก", "รายรับอื่นๆ", "ฝากเงินเข้าเงินเก็บ 🏦", "ถอนเงินเก็บมาใช้ 💵"])
+        amount_income = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key="income_amt")
+        income_note = st.text_input("บันทึกย่อ", placeholder="เช่น เงินเดือนกรกฎา, โบนัส")
+        submit_income = st.form_submit_button("💵 บันทึกรายการเงิน")
+        if submit_income and amount_income > 0:
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            
+            if income_type in ["เงินเดือน/รายรับหลัก", "รายรับอื่นๆ"]:
+                update_bank_balance(amount_income, is_income=True)
+                db.collection("direct_transactions").add({
+                    "date": today_str,
+                    "category": income_type,
+                    "amount": amount_income,
+                    "note": income_note,
+                    "timestamp": firestore.SERVER_TIMESTAMP
+                })
+                st.success(f"บันทึกรายรับ ฿{amount_income} เข้าบัญชีหลักเรียบร้อย!")
+            
+            elif income_type == "ฝากเงินเข้าเงินเก็บ 🏦":
+                if update_savings_balance(amount_income, is_deposit=True):
+                    st.success(f"ย้ายเงิน ฿{amount_income} จากบัญชีหลัก ไปยังเงินเก็บเรียบร้อย!")
+                else:
+                    st.error("เงินในบัญชีปัจจุบันไม่เพียงพอสำหรับนำไปเก็บเพิ่ม")
+            
+            elif income_type == "ถอนเงินเก็บมาใช้ 💵":
+                if update_savings_balance(amount_income, is_deposit=False):
+                    st.success(f"ดึงเงินเก็บ ฿{amount_income} กลับเข้าสู่บัญชีหลักเรียบร้อย!")
+                else:
+                    st.error("เงินเก็บปัจจุบันมีไม่เพียงพอให้ถอน")
+            
+            st.rerun()
+
+# 6. ส่วนการแสดงประวัติรายการเดือนนี้ (เรียงตาม date เพื่อเลี่ยง Composite Index Error)
 st.markdown("---")
 st.subheader("🕒 รายการล่าสุดเดือนนี้")
 
@@ -124,7 +179,7 @@ current_month = today.strftime('%m')
 current_year = today.strftime('%Y')
 start_date = f"{current_year}-{current_month}-01"
 
-docs_daily = db.collection("daily_transactions").where("date", ">=", start_date).order_by("timestamp", direction=firestore.Query.DESCENDING).limit(5).stream()
+docs_daily = db.collection("daily_transactions").where("date", ">=", start_date).order_by("date", direction=firestore.Query.DESCENDING).limit(5).stream()
 list_daily = [doc.to_dict() for doc in docs_daily]
 st.write("**📝 รายการกินใช้รายวัน**")
 if list_daily:
@@ -133,11 +188,11 @@ if list_daily:
 else:
     st.caption("ยังไม่มีรายการรายวันในเดือนนี้")
 
-docs_direct = db.collection("direct_transactions").where("date", ">=", start_date).order_by("timestamp", direction=firestore.Query.DESCENDING).stream()
+docs_direct = db.collection("direct_transactions").where("date", ">=", start_date).order_by("date", direction=firestore.Query.DESCENDING).stream()
 list_direct = [doc.to_dict() for doc in docs_direct]
-st.write("**⛽ รายการหักบัญชีโดยตรง**")
+st.write("**💰 รายการเคลื่อนไหวบัญชีหลัก (รายรับ/น้ำมัน/แฟน/ผ่อนของ)**")
 if list_direct:
     df_direct = pd.DataFrame(list_direct)[["date", "category", "amount", "note"]]
     st.dataframe(df_direct.rename(columns={"date":"วันที่", "category":"ประเภท", "amount":"จำนวนเงิน", "note":"หมายเหตุ"}), use_container_width=True)
 else:
-    st.caption("ยังไม่มีรายการหักบัญชีโดยตรงในเดือนนี้")
+    st.caption("ยังไม่มีรายการเคลื่อนไหวบัญชีหลักในเดือนนี้")
