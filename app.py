@@ -5,80 +5,64 @@ from datetime import datetime
 import pandas as pd
 
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ iPhone
-st.set_page_config(page_title="FinTrack Motion", page_icon="📊", layout="centered")
+st.set_page_config(page_title="FinTrack Ticker", page_icon="📈", layout="centered")
 
-# 🎯 เสริม CSS Animation & Glassmorphism Effect ให้ขยับเคลื่อนไหวได้สวยงามล้ำสมัย
+# 🎯 เสริม CSS สไตล์กระดานหุ้นโลก (Ticker Running & Neon Cyberpunk)
 st.markdown("""
     <style>
-    @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+    /* แอนิเมชันสำหรับข้อความวิ่งแบบกระดานหุ้น */
+    @keyframes ticker {
+        0% { transform: translate3d(100%, 0, 0); }
+        100% { transform: translate3d(-100%, 0, 0); }
     }
     
-    .main { background-color: #f4f6f9; }
+    @keyframes pulseGlow {
+        0% { opacity: 0.6; }
+        50% { opacity: 1; }
+        100% { opacity: 0.6; }
+    }
     
-    /* การ์ดกระเป๋ารายวันสะสม */
-    .card-daily {
-        background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%);
-        padding: 22px; color: white; border-radius: 18px;
-        box-shadow: 0 8px 20px rgba(0, 180, 219, 0.25); 
-        margin-bottom: 18px;
-        animation: fadeInUp 0.6s ease-out forwards;
+    .main { background-color: #0b0e14; }
+    
+    /* แถบวิ่งกระดานหุ้นด้านบนสุด */
+    .ticker-wrap {
+        width: 100%; background-color: #161a25;
+        overflow: hidden; padding: 8px 0;
+        border-bottom: 2px solid #232936; margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    .ticker-move {
+        display: inline-block; white-space: nowrap;
+        animation: ticker 20s linear infinite;
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bold; font-size: 14px;
+    }
+    
+    /* กล่องการ์ดหลักสไตล์ Dashboard หุ้น */
+    .stock-card {
+        background: #161a25; border: 1px solid #232936;
+        padding: 20px; border-radius: 12px; margin-bottom: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         transition: all 0.3s ease;
     }
-    .card-daily:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 25px rgba(0, 180, 219, 0.4);
+    .stock-card:hover {
+        border-color: #3b82f6;
+        transform: scale(1.02);
     }
     
-    /* การ์ดกระเป๋ารายวันสะสม (เมื่อติดลบ) */
-    .card-daily-alert {
-        background: linear-gradient(135deg, #ed213a 0%, #93291e 100%);
-        padding: 22px; color: white; border-radius: 18px;
-        box-shadow: 0 8px 20px rgba(237, 33, 58, 0.25); 
-        margin-bottom: 18px;
-        animation: fadeInUp 0.6s ease-out forwards;
-        transition: all 0.3s ease;
-    }
-    .card-daily-alert:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 25px rgba(237, 33, 58, 0.4);
-    }
+    .ticker-green { color: #00e676; text-shadow: 0 0 8px rgba(0,230,118,0.4); }
+    .ticker-red { color: #ff1744; text-shadow: 0 0 8px rgba(255,23,68,0.4); }
+    .ticker-blue { color: #29b6f6; text-shadow: 0 0 8px rgba(41,182,246,0.4); }
+    .ticker-gold { color: #ffd700; text-shadow: 0 0 8px rgba(255,215,0,0.4); }
     
-    /* การ์ดบัญชีหลัก */
-    .card-bank {
-        background: linear-gradient(135deg, #1f4068 0%, #162447 100%);
-        padding: 18px; color: white; border-radius: 15px;
-        box-shadow: 0 6px 15px rgba(22, 36, 71, 0.2);
-        animation: fadeInUp 0.8s ease-out forwards;
-        transition: all 0.3s ease;
-    }
-    .card-bank:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 20px rgba(22, 36, 71, 0.35);
-    }
+    .lbl-title { font-size: 12px; color: #848e9c; font-weight: 500; text-transform: uppercase; }
+    .lbl-val { font-size: 28px; font-weight: 700; font-family: 'Impact', sans-serif; margin-top: 5px; }
     
-    /* การ์ดเงินเก็บ */
-    .card-savings {
-        background: linear-gradient(135deg, #f12711 0%, #f5af19 100%);
-        padding: 18px; color: white; border-radius: 15px;
-        box-shadow: 0 6px 15px rgba(245, 175, 25, 0.2);
-        animation: fadeInUp 1.0s ease-out forwards;
-        transition: all 0.3s ease;
+    /* ปุ่มส่งแบบฟอร์มสไตล์เทรดเดอร์ */
+    div.stButton > button {
+        background-color: #2b6cb0 !important; color: white !important;
+        border-radius: 8px !important; width: 100%;
     }
-    .card-savings:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 20px rgba(245, 175, 25, 0.35);
-    }
-    
-    .card-title { font-size: 13px; opacity: 0.9; font-weight: 500; letter-spacing: 0.5px; margin-bottom: 6px; }
-    .card-value { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.15); }
     </style>
 """, unsafe_allow_html=True)
 
@@ -157,50 +141,61 @@ def get_past_descriptions():
             past_items.add(desc.strip())
     return sorted(list(past_items))
 
-# 4. ส่วนของการแสดงผล UI แดชบอร์ดเคลื่อนไหว (Motion Premium Design)
-st.title("📊 FinTrack Mobile")
-st.caption("ระบบบริหารเงินส่วนบุคคลอัจฉริยะ")
-
+# 4. ส่วนคำนวณเงินและจัดฟอร์แมตข้อมูล
 bank_balance, daily_wallet, current_savings, start_date_str = calculate_finances()
 
-# การ์ดเงินรายวันสะสมเคลื่อนไหว Fade In & Slide Up อัตโนมัติ
+# 📈 แถบตัววิ่งตลาดหุ้นโลกจำลองสถานะกระเป๋าเงินด้านบนสุด
+daily_status = f"▲ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ {daily_wallet:,.2f}"
+ticker_text = f"• DAILY_WALLET: {daily_status}  • BANK_MAIN: ฿{bank_balance:,.2f}  • SAVINGS_INDEX: ฿{current_savings:,.2f}  • STATUS: ACTIVE 🟢"
+
+st.markdown(f"""
+    <div class="ticker-wrap">
+        <div class="ticker-move">
+            <span class="{ 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">{ticker_text} &nbsp;&nbsp;&nbsp;&nbsp; {ticker_text}</span>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+st.title("📈 FinTrack Terminal")
+st.caption("ระบบมอนิเตอร์และบริหารกระเป๋าเงินดิจิทัลสไตล์พอร์ตหุ้น")
+
+# 📊 กล่อง Dashboard สไตล์หุ้น
 if daily_wallet >= 0:
     st.markdown(f"""
-        <div class="card-daily">
-            <div class="card-title">📱 เงินรายวันสะสมคงเหลือ (พร้อมจ่าย)</div>
-            <div class="card-value">฿ {daily_wallet:,.2f}</div>
+        <div class="stock-card">
+            <div class="lbl-title">📱 DAILY ALLOCATED INDEX (งบรายวันสะสม)</div>
+            <div class="lbl-val ticker-green">฿ {daily_wallet:,.2f} <span style="font-size:16px;">▲ READY</span></div>
         </div>
     """, unsafe_allow_html=True)
 else:
     st.markdown(f"""
-        <div class="card-daily-alert">
-            <div class="card-title">🚨 เงินรายวันติดลบเกินงบสะสม</div>
-            <div class="card-value">฿ {daily_wallet:,.2f}</div>
+        <div class="stock-card">
+            <div class="lbl-title">🚨 DAILY ALLOCATED INDEX (งบรายวันสะสม)</div>
+            <div class="lbl-val ticker-red">฿ {daily_wallet:,.2f} <span style="font-size:16px;">▼ OVERDRAWN</span></div>
         </div>
     """, unsafe_allow_html=True)
 
-# การ์ดแถวสองจะสไลด์ตามขึ้นมาด้วยความเร็วที่ต่างกันเล็กน้อยเพื่อความเนียนตา (Stagger Animation)
 col1, col2 = st.columns(2)
 with col1:
     st.markdown(f"""
-        <div class="card-bank">
-            <div class="card-title">💵 บัญชีหลักปัจจุบัน</div>
-            <div class="card-value" style="font-size: 20px;">฿ {bank_balance:,.2f}</div>
+        <div class="stock-card">
+            <div class="lbl-title">💵 CURRENT CASH (บัญชีหลัก)</div>
+            <div class="lbl-val ticker-blue" style="font-size: 20px;">฿ {bank_balance:,.2f}</div>
         </div>
     """, unsafe_allow_html=True)
 with col2:
     st.markdown(f"""
-        <div class="card-savings">
-            <div class="card-title">🏦 เงินเก็บปัจจุบัน</div>
-            <div class="card-value" style="font-size: 20px;">฿ {current_savings:,.2f}</div>
+        <div class="stock-card">
+            <div class="lbl-title">🏦 TOTAL SAVINGS (เงินเก็บออม)</div>
+            <div class="lbl-val ticker-gold" style="font-size: 20px;">฿ {current_savings:,.2f}</div>
         </div>
     """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # 5. ส่วนฟอร์มบันทึกข้อมูล
-st.subheader("➕ บันทึกรายการใหม่")
-tab1, tab2, tab3 = st.tabs(["🛒 รายจ่ายรายวัน", "💳 หักบัญชีหลักโดยตรง", "💰 รายรับ/เงินเก็บ"])
+st.subheader("➕ บันทึกธุรกรรมใหม่ (Execute Order)")
+tab1, tab2, tab3 = st.tabs(["🛒 บันทึกรายวัน", "💳 หักบัญชีหลักโดยตรง", "💰 ฝาก/ถอน/รายรับ"])
 
 with tab1:
     with st.form("daily_form", clear_on_submit=True):
@@ -210,7 +205,7 @@ with tab1:
         selected_option = st.selectbox("เลือกจากรายการเดิมที่เคยบันทึก:", options)
         custom_desc = st.text_input("ระบุรายการใหม่ (หากไม่มีในตัวเลือกด้านบน):", placeholder="เช่น ค่าข้าวเช้า, กาแฟ")
         amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key="daily_amt")
-        submit_daily = st.form_submit_button("💾 บันทึกรายวัน")
+        submit_daily = st.form_submit_button("💾 ยืนยันคำสั่งซื้อรายวัน")
         
         if submit_daily and amount > 0:
             if selected_option != "-- พิมพ์รายการใหม่ด้วยตัวเอง --":
@@ -226,17 +221,15 @@ with tab1:
                     "amount": amount,
                     "timestamp": firestore.SERVER_TIMESTAMP
                 })
-                st.success(f"บันทึก {final_desc} ฿{amount} เรียบร้อย!")
+                st.success(f"บันทึกคำสั่ง {final_desc} ฿{amount} สำเร็จ!")
                 st.rerun()
-            else:
-                st.error("กรุณากรอกหรือเลือกรายละเอียดรายการ")
 
 with tab2:
     with st.form("direct_form", clear_on_submit=True):
-        category = st.selectbox("ประเภทค่าใช้จ่ายรายเดือน", ["ค่าน้ำมัน", "ค่าเน็ต", "ค่าผ่อนของ", "ให้แฟน"])
+        category = st.selectbox("ประเภทค่าใช้จ่ายหลัก", ["ค่าน้ำมัน", "ค่าเน็ต", "ค่าผ่อนของ", "ให้แฟน"])
         amount_direct = st.number_input("จำนวนเงินที่จ่ายจริง (บาท)", min_value=0.0, step=1.0, key="direct_amt")
         note = st.text_input("บันทึกย่อ (ถ้ามี)", placeholder="เช่น ปั๊ม ปตท., งวด 3/12")
-        submit_direct = st.form_submit_button("💳 บันทึกหักบัญชีหลักโดยตรง")
+        submit_direct = st.form_submit_button("💳 บันทึกตัดจ่ายบัญชีหลัก")
         if submit_direct and amount_direct > 0:
             today_str = datetime.now().strftime('%Y-%m-%d')
             db.collection("direct_transactions").add({
@@ -246,7 +239,7 @@ with tab2:
                 "note": note,
                 "timestamp": firestore.SERVER_TIMESTAMP
             })
-            st.success(f"บันทึกการจ่าย {category} ฿{amount_direct} เรียบร้อย!")
+            st.success(f"บันทึกจ่าย {category} ฿{amount_direct} เรียบร้อย!")
             st.rerun()
 
 with tab3:
@@ -263,13 +256,13 @@ with tab3:
         )
         amount_income = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key="income_amt")
         income_note = st.text_input("บันทึกย่อ", placeholder="เช่น รายรับเสริม, ออมเงิน")
-        submit_income = st.form_submit_button("💵 บันทึกรายการเงิน")
+        submit_income = st.form_submit_button("💵 ประมวลผลธุรกรรมเงิน")
         if submit_income and amount_income > 0:
             today_str = datetime.now().strftime('%Y-%m-%d')
             
             if income_type in ["เงินเดือน/รายรับหลัก", "รายรับอื่นๆ"]:
                 add_income_to_bank(amount_income)
-                st.success(f"บันทึกรายรับ ฿{amount_income} เข้าสู่ระบบเรียบร้อย!")
+                st.success(f"เติมเงินรับ ฿{amount_income} เข้าสู่พอร์ตแล้ว!")
             
             elif income_type == "ฝากเงินเก็บ (หักจากยอดเงินปัจจุบัน) 🏦":
                 if bank_balance >= amount_income:
@@ -281,9 +274,9 @@ with tab3:
                         "note": income_note,
                         "timestamp": firestore.SERVER_TIMESTAMP
                     })
-                    st.success(f"ย้ายเงิน ฿{amount_income} ไปยังเงินเก็บเรียบร้อย!")
+                    st.success(f"โอนเงิน ฿{amount_income} เข้าดัชนีเงินเก็บแล้ว!")
                 else:
-                    st.error("ยอดเงินในบัญชีปัจจุบันไม่เพียงพอ")
+                    st.error("เงินสดในบัญชีปัจจุบันไม่เพียงพอ")
             
             elif income_type == "ฝากเงินเก็บ (หักจากเงินรายวันสะสม) 📱":
                 if daily_wallet >= amount_income:
@@ -295,9 +288,9 @@ with tab3:
                         "note": income_note,
                         "timestamp": firestore.SERVER_TIMESTAMP
                     })
-                    st.success(f"หักเงินรายวันสะสม ฿{amount_income} ย้ายไปที่เงินเก็บเรียบร้อย!")
+                    st.success(f"ย้ายโควตา ฿{amount_income} ไปยังเงินเก็บแล้ว!")
                 else:
-                    st.error("เงินรายวันสะสมมีไม่เพียงพอ")
+                    st.error("ยอดสะสมรายวันไม่เพียงพอ")
             
             elif income_type == "ถอนเงินเก็บมาใช้ (กลับเข้าบัญชีปัจจุบัน) 💵":
                 if current_savings >= amount_income:
@@ -309,15 +302,15 @@ with tab3:
                         "note": income_note,
                         "timestamp": firestore.SERVER_TIMESTAMP
                     })
-                    st.success(f"ดึงเงินเก็บ ฿{amount_income} กลับเข้าสู่บัญชีหลักเรียบร้อย!")
+                    st.success(f"ดึงสภาพคล่อง ฿{amount_income} กลับเข้าบัญชีหลัก!")
                 else:
-                    st.error("เงินเก็บปัจจุบันมีไม่เพียงพอ")
+                    st.error("ยอดเงินเก็บมีไม่เพียงพอสำหรับการถอน")
             
             st.rerun()
 
 # 6. ส่วนการแสดงประวัติรายการ
 st.markdown("---")
-st.subheader("🕒 รายการล่าสุด")
+st.subheader("🕒 ประวัติการทำรายการย้อนหลัง")
 
 try:
     docs_daily = db.collection("daily_transactions").where("date", ">=", start_date_str).order_by("date", direction=firestore.Query.DESCENDING).limit(5).stream()
@@ -325,12 +318,12 @@ try:
 except Exception:
     list_daily = []
 
-st.write("**📝 รายการกินใช้รายวัน**")
+st.write("**📝 ออเดอร์กินใช้รายวันล่าสุด**")
 if list_daily:
     df_daily = pd.DataFrame(list_daily)[["date", "description", "amount"]]
     st.dataframe(df_daily.rename(columns={"date":"วันที่", "description":"รายการ", "amount":"จำนวนเงิน"}), use_container_width=True)
 else:
-    st.caption("ยังไม่มีรายการรายวันในระบบ")
+    st.caption("ไม่มีรายการประวัติ")
 
 try:
     docs_direct = db.collection("direct_transactions").where("date", ">=", start_date_str).order_by("date", direction=firestore.Query.DESCENDING).limit(10).stream()
@@ -338,11 +331,11 @@ try:
 except Exception:
     list_direct = []
 
-st.write("**💰 รายการเคลื่อนไหวบัญชีหลัก (รายรับ/น้ำมัน/แฟน/ผ่อนของ/โอนเก็บ)**")
+st.write("**💰 บันทึกความเคลื่อนไหวบัญชีหลักและกองทุน**")
 if list_direct:
     df_direct = pd.DataFrame(list_direct)[["date", "category", "amount", "note"]]
     df_display = df_direct.copy()
-    df_display.columns = ["วันที่", "ประเภท", "จำนวนเงิน", "หมายเหตุ"]
+    df_display.columns = ["วันที่", "ประเภทธุรกรรม", "จำนวนเงิน", "หมายเหตุ"]
     st.dataframe(df_display, use_container_width=True)
 else:
-    st.caption("ยังไม่มีรายการเคลื่อนไหวบัญชีหลักในระบบ")
+    st.caption("ไม่มีรายการประวัติ")
