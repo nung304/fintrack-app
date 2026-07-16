@@ -202,4 +202,64 @@ with tab3:
                 else:
                     st.error("ยอดเงินในบัญชีปัจจุบันไม่เพียงพอ")
             
-            elif income_type == "ฝากเงินเก็บ (หักจากเงินรายวันสะสม
+            elif income_type == "ฝากเงินเก็บ (หักจากเงินรายวันสะสม) 📱":
+                if daily_wallet >= amount_income:
+                    db.collection("account").document("main_wallet").update({"savings": current_savings + amount_income})
+                    db.collection("direct_transactions").add({
+                        "date": today_str,
+                        "category": "ฝากเงินเก็บ (หักจากเงินรายวัน)",
+                        "amount": amount_income,
+                        "note": income_note,
+                        "timestamp": firestore.SERVER_TIMESTAMP
+                    })
+                    st.success(f"หักเงินรายวันสะสม ฿{amount_income} ย้ายไปที่เงินเก็บเรียบร้อย!")
+                else:
+                    st.error("เงินรายวันสะสมมีไม่เพียงพอ")
+            
+            elif income_type == "ถอนเงินเก็บมาใช้ (กลับเข้าบัญชีปัจจุบัน) 💵":
+                if current_savings >= amount_income:
+                    db.collection("account").document("main_wallet").update({"savings": current_savings - amount_income})
+                    db.collection("direct_transactions").add({
+                        "date": today_str,
+                        "category": "ถอนเงินเก็บกลับเข้าบัญชี",
+                        "amount": -amount_income,
+                        "note": income_note,
+                        "timestamp": firestore.SERVER_TIMESTAMP
+                    })
+                    st.success(f"ดึงเงินเก็บ ฿{amount_income} กลับเข้าสู่บัญชีหลักเรียบร้อย!")
+                else:
+                    st.error("เงินเก็บปัจจุบันมีไม่เพียงพอ")
+            
+            st.rerun()
+
+# 6. ส่วนการแสดงประวัติรายการ
+st.markdown("---")
+st.subheader("🕒 รายการล่าสุด")
+
+try:
+    docs_daily = db.collection("daily_transactions").where("date", ">=", start_date_str).order_by("date", direction=firestore.Query.DESCENDING).limit(5).stream()
+    list_daily = [doc.to_dict() for doc in docs_daily]
+except Exception:
+    list_daily = []
+
+st.write("**📝 รายการกินใช้รายวัน**")
+if list_daily:
+    df_daily = pd.DataFrame(list_daily)[["date", "description", "amount"]]
+    st.dataframe(df_daily.rename(columns={"date":"วันที่", "description":"รายการ", "amount":"จำนวนเงิน"}), use_container_width=True)
+else:
+    st.caption("ยังไม่มีรายการรายวันในระบบ")
+
+try:
+    docs_direct = db.collection("direct_transactions").where("date", ">=", start_date_str).order_by("date", direction=firestore.Query.DESCENDING).limit(10).stream()
+    list_direct = [doc.to_dict() for doc in docs_direct]
+except Exception:
+    list_direct = []
+
+st.write("**💰 รายการเคลื่อนไหวบัญชีหลัก (รายรับ/น้ำมัน/แฟน/ผ่อนของ/โอนเก็บ)**")
+if list_direct:
+    df_direct = pd.DataFrame(list_direct)[["date", "category", "amount", "note"]]
+    df_display = df_direct.copy()
+    df_display.columns = ["วันที่", "ประเภท", "จำนวนเงิน", "หมายเหตุ"]
+    st.dataframe(df_display, use_container_width=True)
+else:
+    st.caption("ยังไม่มีรายการเคลื่อนไหวบัญชีหลักในระบบ")
