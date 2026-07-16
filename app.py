@@ -7,19 +7,19 @@ import pandas as pd
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ iPhone
 st.set_page_config(page_title="FinTrack Ticker", page_icon="📈", layout="centered")
 
-# 🎯 เสริม CSS สไตล์กระดานหุ้นโลก (Ticker Running & Neon Cyberpunk)
+# 🎯 เสริม CSS สไตล์กระดานหุ้นไทย (ตัววิ่งภาษาไทย รองรับ Font สบายตา)
 st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap');
+    
+    html, body, [data-testid="stWidgetLabel"], .main {
+        font-family: 'IBM Plex Sans Thai', sans-serif !important;
+    }
+
     /* แอนิเมชันสำหรับข้อความวิ่งแบบกระดานหุ้น */
     @keyframes ticker {
         0% { transform: translate3d(100%, 0, 0); }
         100% { transform: translate3d(-100%, 0, 0); }
-    }
-    
-    @keyframes pulseGlow {
-        0% { opacity: 0.6; }
-        50% { opacity: 1; }
-        100% { opacity: 0.6; }
     }
     
     .main { background-color: #0b0e14; }
@@ -27,15 +27,14 @@ st.markdown("""
     /* แถบวิ่งกระดานหุ้นด้านบนสุด */
     .ticker-wrap {
         width: 100%; background-color: #161a25;
-        overflow: hidden; padding: 8px 0;
+        overflow: hidden; padding: 10px 0;
         border-bottom: 2px solid #232936; margin-bottom: 20px;
         border-radius: 8px;
     }
     .ticker-move {
         display: inline-block; white-space: nowrap;
-        animation: ticker 20s linear infinite;
-        font-family: 'Courier New', Courier, monospace;
-        font-weight: bold; font-size: 14px;
+        animation: ticker 25s linear infinite;
+        font-weight: 600; font-size: 15px;
     }
     
     /* กล่องการ์ดหลักสไตล์ Dashboard หุ้น */
@@ -55,10 +54,9 @@ st.markdown("""
     .ticker-blue { color: #29b6f6; text-shadow: 0 0 8px rgba(41,182,246,0.4); }
     .ticker-gold { color: #ffd700; text-shadow: 0 0 8px rgba(255,215,0,0.4); }
     
-    .lbl-title { font-size: 12px; color: #848e9c; font-weight: 500; text-transform: uppercase; }
-    .lbl-val { font-size: 28px; font-weight: 700; font-family: 'Impact', sans-serif; margin-top: 5px; }
+    .lbl-title { font-size: 13px; color: #848e9c; font-weight: 500; }
+    .lbl-val { font-size: 28px; font-weight: 700; margin-top: 5px; }
     
-    /* ปุ่มส่งแบบฟอร์มสไตล์เทรดเดอร์ */
     div.stButton > button {
         background-color: #2b6cb0 !important; color: white !important;
         border-radius: 8px !important; width: 100%;
@@ -144,14 +142,14 @@ def get_past_descriptions():
 # 4. ส่วนคำนวณเงินและจัดฟอร์แมตข้อมูล
 bank_balance, daily_wallet, current_savings, start_date_str = calculate_finances()
 
-# 📈 แถบตัววิ่งตลาดหุ้นโลกจำลองสถานะกระเป๋าเงินด้านบนสุด
-daily_status = f"▲ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ {daily_wallet:,.2f}"
-ticker_text = f"• DAILY_WALLET: {daily_status}  • BANK_MAIN: ฿{bank_balance:,.2f}  • SAVINGS_INDEX: ฿{current_savings:,.2f}  • STATUS: ACTIVE 🟢"
+# 📈 ปรับข้อความแถววิ่งด้านบนเป็นภาษาไทยแบบกระดานหุ้นด่วน
+daily_status = f"▲ คงเหลือ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ ติดลบ {daily_wallet:,.2f}"
+ticker_text = f"• กระเป๋ารายวันสะสม: {daily_status} บาท  • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f}  • ยอดเงินเก็บออม: ฿{current_savings:,.2f}  • สถานะระบบ: เปิดทำงานปกติ 🟢"
 
 st.markdown(f"""
     <div class="ticker-wrap">
         <div class="ticker-move">
-            <span class="{ 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">{ticker_text} &nbsp;&nbsp;&nbsp;&nbsp; {ticker_text}</span>
+            <span class="{ 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">{ticker_text} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {ticker_text}</span>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -159,19 +157,19 @@ st.markdown(f"""
 st.title("📈 FinTrack Terminal")
 st.caption("ระบบมอนิเตอร์และบริหารกระเป๋าเงินดิจิทัลสไตล์พอร์ตหุ้น")
 
-# 📊 กล่อง Dashboard สไตล์หุ้น
+# 📊 กล่อง Dashboard
 if daily_wallet >= 0:
     st.markdown(f"""
         <div class="stock-card">
             <div class="lbl-title">📱 DAILY ALLOCATED INDEX (งบรายวันสะสม)</div>
-            <div class="lbl-val ticker-green">฿ {daily_wallet:,.2f} <span style="font-size:16px;">▲ READY</span></div>
+            <div class="lbl-val ticker-green">฿ {daily_wallet:,.2f} <span style="font-size:16px;">▲ พร้อมใช้งาน</span></div>
         </div>
     """, unsafe_allow_html=True)
 else:
     st.markdown(f"""
         <div class="stock-card">
             <div class="lbl-title">🚨 DAILY ALLOCATED INDEX (งบรายวันสะสม)</div>
-            <div class="lbl-val ticker-red">฿ {daily_wallet:,.2f} <span style="font-size:16px;">▼ OVERDRAWN</span></div>
+            <div class="lbl-val ticker-red">฿ {daily_wallet:,.2f} <span style="font-size:16px;">▼ เกินงบสะสม</span></div>
         </div>
     """, unsafe_allow_html=True)
 
