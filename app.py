@@ -5,7 +5,37 @@ from datetime import datetime
 import pandas as pd
 
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ iPhone
-st.set_page_config(page_title="FinTrack NoSQL", page_icon="📊", layout="centered")
+st.set_page_config(page_title="FinTrack Premium", page_icon="📊", layout="centered")
+
+# เสริม CSS ตกแต่งหน้าตาแอปและกล่องการ์ดให้สวยงามสไตล์ iOS
+st.markdown("""
+    <style>
+    .main { background-color: #f7f9fc; }
+    .card-daily {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        padding: 20px; color: white; border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(56, 239, 125, 0.3); margin-bottom: 15px;
+    }
+    .card-daily-alert {
+        background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+        padding: 20px; color: white; border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(255, 75, 43, 0.3); margin-bottom: 15px;
+    }
+    .card-bank {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        padding: 15px; color: white; border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(42, 82, 152, 0.2);
+    }
+    .card-savings {
+        background: linear-gradient(135deg, #f857a6 0%, #ff5858 100%);
+        background: linear-gradient(135deg, #f1c40f 0%, #f39c12 100%);
+        padding: 15px; color: white; border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
+    }
+    .card-title { font-size: 13px; opacity: 0.85; font-weight: 500; margin-bottom: 5px; }
+    .card-value { font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
+    </style>
+""", unsafe_allow_html=True)
 
 # 2. เชื่อมต่อ Firebase NoSQL (Firestore) ผ่าน Secrets
 if not firebase_admin._apps:
@@ -17,7 +47,6 @@ db = firestore.client()
 
 # 3. ฟังก์ชันจัดการข้อมูล (NoSQL Firestore API)
 def init_account():
-    """สร้างยอดเงินเริ่มต้นและบันทึกวันเริ่มใช้งานวันแรก"""
     doc_ref = db.collection("account").document("main_wallet")
     if not doc_ref.get().exists:
         doc_ref.set({
@@ -39,14 +68,12 @@ def get_account_data():
     return data["initial_bank_balance"], data.get("savings", 0.0), data["start_date"]
 
 def add_income_to_bank(amount):
-    """เมื่อมีรายรับเข้า ให้ไปบวกเพิ่มในยอดเงินตั้งต้น"""
     initial_bank, _, _ = get_account_data()
     db.collection("account").document("main_wallet").update({
         "initial_bank_balance": initial_bank + amount
     })
 
 def calculate_finances():
-    """ลอจิกคำนวณการหักเงินวันละ 100 อัตโนมัติ และยอดคงเหลือจริง ปลอดภัยจาก KeyError"""
     initial_bank, current_savings, start_date_str = get_account_data()
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
     today = datetime.now()
@@ -57,17 +84,14 @@ def calculate_finances():
     
     total_auto_allocated = days_passed * 100
     
-    # คำนวณฝั่งรายจ่ายรายวัน
     docs_daily = db.collection("daily_transactions").where("date", ">=", start_date_str).stream()
     total_daily_spent = sum([doc.to_dict().get('amount', 0.0) for doc in docs_daily])
     
-    # คำนวณฝั่งย้ายเงินรายวันไปเข้าเงินเก็บ
     docs_moved = db.collection("direct_transactions").where("category", "==", "ฝากเงินเก็บ (หักจากเงินรายวัน)").stream()
     total_daily_moved = sum([doc.to_dict().get('amount', 0.0) for doc in docs_moved])
     
     daily_wallet_balance = total_auto_allocated - total_daily_spent - total_daily_moved
     
-    # คำนวณฝั่งรายจ่ายประจำ/รายรับ/ถอนเงินเก็บ
     docs_direct = db.collection("direct_transactions").stream()
     total_direct_spent = 0
     for doc in docs_direct:
@@ -80,56 +104,70 @@ def calculate_finances():
     return actual_bank_balance, daily_wallet_balance, current_savings, start_date_str
 
 def get_past_descriptions():
-    """ดึงประวัติรายการที่เคยพิมพ์ไปแล้ว เพื่อเอามาเป็นตัวเลือกอัตโนมัติ"""
     docs = db.collection("daily_transactions").stream()
-    past_items = set() # ใช้ set เพื่อล้างคำซ้ำอัตโนมัติ
+    past_items = set()
     for doc in docs:
         desc = doc.to_dict().get("description")
         if desc:
             past_items.add(desc.strip())
     return sorted(list(past_items))
 
-# 4. ส่วนของการแสดงผล UI บน iPhone
+# 4. ส่วนของการแสดงผล UI แดชบอร์ดแบบใหม่ (Premium Design)
 st.title("📊 FinTrack Mobile")
-st.caption("ระบบบริหารเงินอัจฉริยะ (หักโควตารายวัน 100B อัตโนมัติ)")
+st.caption("ระบบบริหารเงินส่วนบุคคลอัจฉริยะ")
 
 bank_balance, daily_wallet, current_savings, start_date_str = calculate_finances()
 
-st.markdown("---")
+# การ์ดเงินรายวันสะสมเด่น ๆ ด้านบน
 if daily_wallet >= 0:
-    st.metric(label="📱 เงินรายวันสะสมคงเหลือ (พร้อมให้กดจ่าย)", value=f"฿ {daily_wallet:,.2f}")
+    st.markdown(f"""
+        <div class="card-daily">
+            <div class="card-title">📱 เงินรายวันสะสมคงเหลือ (พร้อมให้กดจ่าย)</div>
+            <div class="card-value">฿ {daily_wallet:,.2f}</div>
+        </div>
+    """, unsafe_allow_html=True)
 else:
-    st.metric(label="🚨 เงินรายวันติดลบเกินงบสะสม", value=f"฿ {daily_wallet:,.2f}")
+    st.markdown(f"""
+        <div class="card-daily-alert">
+            <div class="card-title">🚨 เงินรายวันติดลบเกินงบสะสม</div>
+            <div class="card-value">฿ {daily_wallet:,.2f}</div>
+        </div>
+    """, unsafe_allow_html=True)
 
+# การ์ดบัญชีปัจจุบันและเงินเก็บคู่กันในแถวสอง
 col1, col2 = st.columns(2)
 with col1:
-    st.metric(label="💵 ยอดเงินในบัญชีปัจจุบัน (หักวันละ 100 แล้ว)", value=f"฿ {bank_balance:,.2f}")
+    st.markdown(f"""
+        <div class="card-bank">
+            <div class="card-title">💵 บัญชีหลักปัจจุบัน</div>
+            <div class="card-value" style="font-size: 18px;">฿ {bank_balance:,.2f}</div>
+        </div>
+    """, unsafe_allow_html=True)
 with col2:
-    st.metric(label="🏦 เงินเก็บปัจจุบัน", value=f"฿ {current_savings:,.2f}")
-st.markdown("---")
+    st.markdown(f"""
+        <div class="card-savings">
+            <div class="card-title">🏦 เงินเก็บปัจจุบัน</div>
+            <div class="card-value" style="font-size: 18px;">฿ {current_savings:,.2f}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # 5. ส่วนฟอร์มบันทึกข้อมูล
 st.subheader("➕ บันทึกรายการใหม่")
-tab1, tab2, tab3 = st.tabs(["🛒 รายจ่ายรายวัน (หักจากยอดสะสม)", "💳 หักบัญชีหลักโดยตรง", "💰 บันทึกรายรับ/เงินเก็บ"])
+tab1, tab2, tab3 = st.tabs(["🛒 รายจ่ายรายวัน", "💳 หักบัญชีหลักโดยตรง", "💰 รายรับ/เงินเก็บ"])
 
 with tab1:
     with st.form("daily_form", clear_on_submit=True):
         st.write("📝 **เลือกหรือพิมพ์รายละเอียดรายการ**")
-        
-        # 🎯 ลอจิกดึงคำแนะนำอัจฉริยะ: ดึงคำเก่ามาทำลิสต์รายการให้จิ้ม
         past_suggestions = get_past_descriptions()
         options = ["-- พิมพ์รายการใหม่ด้วยตัวเอง --"] + past_suggestions
-        
         selected_option = st.selectbox("เลือกจากรายการเดิมที่เคยบันทึก:", options)
-        
-        # ช่องสำหรับพิมพ์คำใหม่ (จะเปิดให้พิมพ์ถ้าเลือกข้อแรก หรือเลือกพิมพ์ใหม่)
         custom_desc = st.text_input("ระบุรายการใหม่ (หากไม่มีในตัวเลือกด้านบน):", placeholder="เช่น ค่าข้าวเช้า, กาแฟ")
-        
         amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key="daily_amt")
         submit_daily = st.form_submit_button("💾 บันทึกรายวัน")
         
         if submit_daily and amount > 0:
-            # ลอจิกเลือกข้อความ: ถ้าไม่ได้เลือกคำเดิม ให้เอาคำใหม่ที่พิมพ์
             if selected_option != "-- พิมพ์รายการใหม่ด้วยตัวเอง --":
                 final_desc = selected_option
             else:
