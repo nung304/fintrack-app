@@ -5,35 +5,80 @@ from datetime import datetime
 import pandas as pd
 
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ iPhone
-st.set_page_config(page_title="FinTrack Premium", page_icon="📊", layout="centered")
+st.set_page_config(page_title="FinTrack Motion", page_icon="📊", layout="centered")
 
-# เสริม CSS ตกแต่งหน้าตาแอปและกล่องการ์ดให้สวยงามสไตล์ iOS
+# 🎯 เสริม CSS Animation & Glassmorphism Effect ให้ขยับเคลื่อนไหวได้สวยงามล้ำสมัย
 st.markdown("""
     <style>
-    .main { background-color: #f7f9fc; }
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .main { background-color: #f4f6f9; }
+    
+    /* การ์ดกระเป๋ารายวันสะสม */
     .card-daily {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        padding: 20px; color: white; border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(56, 239, 125, 0.3); margin-bottom: 15px;
+        background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%);
+        padding: 22px; color: white; border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(0, 180, 219, 0.25); 
+        margin-bottom: 18px;
+        animation: fadeInUp 0.6s ease-out forwards;
+        transition: all 0.3s ease;
     }
+    .card-daily:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px rgba(0, 180, 219, 0.4);
+    }
+    
+    /* การ์ดกระเป๋ารายวันสะสม (เมื่อติดลบ) */
     .card-daily-alert {
-        background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
-        padding: 20px; color: white; border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(255, 75, 43, 0.3); margin-bottom: 15px;
+        background: linear-gradient(135deg, #ed213a 0%, #93291e 100%);
+        padding: 22px; color: white; border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(237, 33, 58, 0.25); 
+        margin-bottom: 18px;
+        animation: fadeInUp 0.6s ease-out forwards;
+        transition: all 0.3s ease;
     }
+    .card-daily-alert:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px rgba(237, 33, 58, 0.4);
+    }
+    
+    /* การ์ดบัญชีหลัก */
     .card-bank {
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-        padding: 15px; color: white; border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(42, 82, 152, 0.2);
+        background: linear-gradient(135deg, #1f4068 0%, #162447 100%);
+        padding: 18px; color: white; border-radius: 15px;
+        box-shadow: 0 6px 15px rgba(22, 36, 71, 0.2);
+        animation: fadeInUp 0.8s ease-out forwards;
+        transition: all 0.3s ease;
     }
+    .card-bank:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(22, 36, 71, 0.35);
+    }
+    
+    /* การ์ดเงินเก็บ */
     .card-savings {
-        background: linear-gradient(135deg, #f857a6 0%, #ff5858 100%);
-        background: linear-gradient(135deg, #f1c40f 0%, #f39c12 100%);
-        padding: 15px; color: white; border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
+        background: linear-gradient(135deg, #f12711 0%, #f5af19 100%);
+        padding: 18px; color: white; border-radius: 15px;
+        box-shadow: 0 6px 15px rgba(245, 175, 25, 0.2);
+        animation: fadeInUp 1.0s ease-out forwards;
+        transition: all 0.3s ease;
     }
-    .card-title { font-size: 13px; opacity: 0.85; font-weight: 500; margin-bottom: 5px; }
-    .card-value { font-size: 24px; font-weight: 700; letter-spacing: 0.5px; }
+    .card-savings:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 20px rgba(245, 175, 25, 0.35);
+    }
+    
+    .card-title { font-size: 13px; opacity: 0.9; font-weight: 500; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .card-value { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.15); }
     </style>
 """, unsafe_allow_html=True)
 
@@ -112,17 +157,17 @@ def get_past_descriptions():
             past_items.add(desc.strip())
     return sorted(list(past_items))
 
-# 4. ส่วนของการแสดงผล UI แดชบอร์ดแบบใหม่ (Premium Design)
+# 4. ส่วนของการแสดงผล UI แดชบอร์ดเคลื่อนไหว (Motion Premium Design)
 st.title("📊 FinTrack Mobile")
 st.caption("ระบบบริหารเงินส่วนบุคคลอัจฉริยะ")
 
 bank_balance, daily_wallet, current_savings, start_date_str = calculate_finances()
 
-# การ์ดเงินรายวันสะสมเด่น ๆ ด้านบน
+# การ์ดเงินรายวันสะสมเคลื่อนไหว Fade In & Slide Up อัตโนมัติ
 if daily_wallet >= 0:
     st.markdown(f"""
         <div class="card-daily">
-            <div class="card-title">📱 เงินรายวันสะสมคงเหลือ (พร้อมให้กดจ่าย)</div>
+            <div class="card-title">📱 เงินรายวันสะสมคงเหลือ (พร้อมจ่าย)</div>
             <div class="card-value">฿ {daily_wallet:,.2f}</div>
         </div>
     """, unsafe_allow_html=True)
@@ -134,20 +179,20 @@ else:
         </div>
     """, unsafe_allow_html=True)
 
-# การ์ดบัญชีปัจจุบันและเงินเก็บคู่กันในแถวสอง
+# การ์ดแถวสองจะสไลด์ตามขึ้นมาด้วยความเร็วที่ต่างกันเล็กน้อยเพื่อความเนียนตา (Stagger Animation)
 col1, col2 = st.columns(2)
 with col1:
     st.markdown(f"""
         <div class="card-bank">
             <div class="card-title">💵 บัญชีหลักปัจจุบัน</div>
-            <div class="card-value" style="font-size: 18px;">฿ {bank_balance:,.2f}</div>
+            <div class="card-value" style="font-size: 20px;">฿ {bank_balance:,.2f}</div>
         </div>
     """, unsafe_allow_html=True)
 with col2:
     st.markdown(f"""
         <div class="card-savings">
             <div class="card-title">🏦 เงินเก็บปัจจุบัน</div>
-            <div class="card-value" style="font-size: 18px;">฿ {current_savings:,.2f}</div>
+            <div class="card-value" style="font-size: 20px;">฿ {current_savings:,.2f}</div>
         </div>
     """, unsafe_allow_html=True)
 
