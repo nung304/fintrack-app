@@ -131,7 +131,12 @@ def calculate_finances():
         if d.get("category") != "ฝากเงินเก็บ (หักจากเงินรายวัน)":
             total_direct_spent += d.get('amount', 0.0)
             
-    actual_bank_balance = initial_bank - total_auto_allocated - total_direct_spent
+    # 🎯 ปรับปรุงสูตรคำนวณเงินสดในบัญชีหลัก (CURRENT CASH) ให้สมดุล
+    # ถ้ารายวันติดลบ (จ่ายเกินโควตาสะสม) ให้หักเงินสดจริงออกจากบัญชีหลักตามยอดที่จ่ายเกินทันที
+    if daily_wallet_balance < 0:
+        actual_bank_balance = initial_bank - (total_daily_spent + total_daily_moved) - total_direct_spent
+    else:
+        actual_bank_balance = initial_bank - total_auto_allocated - total_direct_spent
     
     return actual_bank_balance, daily_wallet_balance, current_savings, start_date_str
 
@@ -151,7 +156,7 @@ bank_balance, daily_wallet, current_savings, start_date_str = calculate_finances
 daily_status = f"▲ คงเหลือ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ ติดลบ {daily_wallet:,.2f}"
 single_ticker = f"• กระเป๋ารายวันสะสม: {daily_status} บาท &nbsp;&nbsp;&nbsp;&nbsp; • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • ยอดเงินเก็บออม: ฿{current_savings:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • สถานะระบบ: เปิดทำงานปกติ 🟢 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
 
-# 🎯 ปล่อยข้อความวิ่งแบบ 2 กล่องประกบกัน เพื่อให้วิ่งเวียนต่อกันไปแบบไร้ช่องว่างยาวๆ (Seamless Loop)
+# 🎯 ข้อความวิ่งแบบ Seamless Loop
 st.markdown(f"""
     <div class="ticker-wrap">
         <div class="ticker-content { 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">
