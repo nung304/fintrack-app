@@ -212,31 +212,40 @@ with tab1:
         st.write("📝 **รายละเอียดรายการ**")
         past_suggestions = get_past_descriptions()
         
-        # 🎯 ยุบเหลือช่องเดียว: พิมพ์ค้นหาข้อความเดิม หรือพิมพ์สร้างรายการใหม่ได้ในช่องนี้เลย
-        final_desc = st.selectbox(
-            "เลือกหรือพิมพ์ระบุรายการใหม่:",
-            options=past_suggestions,
-            index=None,
-            placeholder="เช่น ค่าข้าวเช้า, กาแฟ (พิมพ์แล้วเลือกหรือกด Enter)",
-            accept_value_from_user=True
+        # 🎯 ปรับแก้ไขระบบค้นหาแบบช่องเดียวอย่างถูกต้องและเสถียร 100%
+        # รวมรายการเดิมไว้ + ตัวเลือกสำหรับพิมพ์รายการใหม่
+        options = ["-- พิมพ์ระบุรายการใหม่เอง --"] + past_suggestions
+        selected_item = st.selectbox(
+            "เลือกรายการเดิม หรือเลือกพิมพ์ใหม่:",
+            options=options,
+            index=0
         )
+        
+        # แสดงช่องพิมพ์ข้อความเฉพาะเมื่อเลือกพิมพ์ใหม่ หรือใช้ระบุรายละเอียดรายการ
+        custom_desc = st.text_input("ระบุรายละเอียดรายการ (พิมพ์คำใหม่ที่นี่):", placeholder="เช่น ค่าข้าวเช้า, กาแฟ")
         
         amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key="daily_amt")
         submit_daily = st.form_submit_button("💾 ยืนยันคำสั่งซื้อรายวัน")
         
         if submit_daily and amount > 0:
-            if final_desc:
+            # ดึงคำจากช่องที่เลือกจริง
+            if selected_item != "-- พิมพ์ระบุรายการใหม่เอง --" and not custom_desc:
+                final_desc = selected_item
+            else:
+                final_desc = custom_desc
+                
+            if final_desc and final_desc.strip():
                 today_str = datetime.now().strftime('%Y-%m-%d')
                 db.collection("daily_transactions").add({
                     "date": today_str,
-                    "description": str(final_desc).strip(),
+                    "description": final_desc.strip(),
                     "amount": amount,
                     "timestamp": firestore.SERVER_TIMESTAMP
                 })
                 st.success(f"บันทึกคำสั่ง {final_desc} ฿{amount} สำเร็จ!")
                 st.rerun()
             else:
-                st.warning("กรุณาระบุรายละเอียดรายการก่อนกดบันทึก")
+                st.warning("กรุณาระบุรายละเอียดรายการ")
 
 with tab2:
     with st.form("direct_form", clear_on_submit=True):
