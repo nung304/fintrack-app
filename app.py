@@ -1,7 +1,7 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pandas as pd
 
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ
@@ -54,6 +54,7 @@ st.markdown("""
     .ticker-red { color: #ff1744; text-shadow: 0 0 8px rgba(255,23,68,0.4); }
     .ticker-blue { color: #29b6f6; text-shadow: 0 0 8px rgba(41,182,246,0.4); }
     .ticker-gold { color: #ffd700; text-shadow: 0 0 8px rgba(255,215,0,0.4); }
+    .ticker-purple { color: #b388ff; text-shadow: 0 0 8px rgba(179,136,255,0.4); }
     
     .lbl-title { font-size: 13px; color: #848e9c; font-weight: 500; }
     .lbl-val { font-size: 28px; font-weight: 700; margin-top: 5px; }
@@ -215,16 +216,6 @@ def get_past_descriptions():
             past_items.add(desc.strip())
     return sorted(list(past_items))
 
-def get_past_direct_notes():
-    docs = db.collection("direct_transactions").stream()
-    past_notes = set()
-    for doc in docs:
-        note = doc.to_dict().get("note")
-        if note and note.strip():
-            past_notes.add(note.strip())
-    return sorted(list(past_notes))
-
-# 🎯 ดึงประเภทค่าใช้จ่ายหลักที่มีอยู่เดิม + ตั้งต้น
 def get_direct_categories():
     default_cats = ["ค่าน้ำมัน", "ค่าเน็ต", "ค่าผ่อนของ", "ให้แฟน", "อื่นๆ"]
     docs = db.collection("direct_transactions").stream()
@@ -235,7 +226,6 @@ def get_direct_categories():
             custom_cats.add(cat.strip())
     return sorted(list(custom_cats))
 
-# 🎯 ดึงประเภทเงินเข้า/เงินเก็บที่มีอยู่เดิม + ตั้งต้น
 def get_income_categories():
     default_types = [
         "เงินเดือน/รายรับหลัก", 
@@ -255,6 +245,19 @@ def get_income_categories():
 # 4. แสดงผล Dashboard
 bank_balance, daily_wallet, current_savings, start_date_str, current_rate = calculate_finances()
 
+# 🧮 คำนวณวันคงเหลือ (Runway Days) นับวันปัจจุบันเป็นวันที่ 1
+total_spendable = bank_balance + daily_wallet
+if current_rate > 0 and total_spendable > 0:
+    runway_days = int(total_spendable // current_rate) # จำนวนวันเต็ม
+    today_date = date.today()
+    # นับวันนี้เป็นวันที่ 1 ดังนั้นวันสุดท้ายคือวันนี้ + (runway_days - 1)
+    end_spend_date = today_date + timedelta(days=max(0, runway_days - 1))
+    thai_months = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+    end_date_str = f"{end_spend_date.day} {thai_months[end_spend_date.month - 1]} {end_spend_date.year + 543}"
+    runway_text = f"ใช้จ่ายได้อีกประมาณ {runway_days:,} วัน (ถึงวันที่ {end_date_str})"
+else:
+    runway_text = "ไม่พอดำเนินการ (ยอดเงินรวมเป็นศูนย์หรือติดลบ)"
+
 daily_status = f"▲ คงเหลือ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ ติดลบ {daily_wallet:,.2f}"
 single_ticker = f"• โควตาจัดสรร: ฿{current_rate:,.0f}/วัน &nbsp;&nbsp;&nbsp;&nbsp; • กระเป๋ารายวันสะสม: {daily_status} บาท &nbsp;&nbsp;&nbsp;&nbsp; • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • ยอดเงินเก็บออม: ฿{current_savings:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • สถานะระบบ: เปิดทำงานปกติ 🟢 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
 
@@ -271,6 +274,17 @@ st.markdown(f"""
 
 st.title("📈 FinTrack Terminal")
 st.caption(f"ระบบมอนิเตอร์และบริหารกระเป๋าเงินดิจิทัล (อัตราจัดสรรปัจจุบัน: ฿{current_rate:,.0f}/วัน)")
+
+# 📅 การ์ดแสดงผลระยะเวลาที่ใช้จ่ายได้จริง (Runway Indicator)
+st.markdown(f"""
+    <div class="stock-card" style="border-left: 5px solid #b388ff;">
+        <div class="lbl-title">⏳ FINANCIAL RUNWAY (ระยะเวลาใช้จ่ายที่เหลือ)</div>
+        <div class="lbl-val ticker-purple" style="font-size: 22px;">{runway_text}</div>
+        <div style="font-size: 12px; color: #848e9c; margin-top: 5px;">
+            *คำนวณจาก (งบรายวันคงเหลือ + บัญชีหลัก = ฿{total_spendable:,.2f}) ÷ ฿{current_rate:,.0f}/วัน (นับวันนี้เป็นวันที่ 1)
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
 if daily_wallet >= 0:
     st.markdown(f"""
@@ -334,7 +348,6 @@ with tab1:
             else:
                 st.warning("กรุณาระบุรายละเอียดรายการ")
 
-# --- TAB 2: หักบัญชีหลักโดยตรง (รองรับประเภทใหม่) ---
 with tab2:
     existing_categories = get_direct_categories()
     cat_options = ["-- พิมพ์ระบุประเภทใหม่ --"] + existing_categories
@@ -346,11 +359,7 @@ with tab2:
         custom_cat_input = st.text_input("ระบุประเภทค่าใช้จ่ายใหม่:", placeholder="เช่น ค่าซ่อมรถ, ค่าประกัน")
 
     with st.form("direct_form", clear_on_submit=True):
-        past_notes = get_past_direct_notes()
-        options_note = ["-- พิมพ์ระบุบันทึกย่อใหม่ --"] + past_notes
-        selected_note = st.selectbox("เลือกบันทึกย่อเดิม (ถ้ามี):", options=options_note, index=0)
-        custom_note = st.text_input("ระบุบันทึกย่อใหม่:", placeholder="เช่น ปั๊ม ปตท., งวด 3/12")
-        
+        note_direct = st.text_input("ระบุบันทึกย่อ (ถ้ามี):", placeholder="เช่น ปั๊ม ปตท., งวด 3/12")
         amount_direct = st.number_input("จำนวนเงินที่จ่ายจริง (บาท)", min_value=0.0, step=1.0, key="direct_amt")
         submit_direct = st.form_submit_button("💳 บันทึกตัดจ่ายบัญชีหลัก")
         
@@ -358,13 +367,12 @@ with tab2:
             final_category = custom_cat_input.strip() if selected_cat_opt == "-- พิมพ์ระบุประเภทใหม่ --" else selected_cat_opt
             
             if final_category:
-                final_note = selected_note if (selected_note != "-- พิมพ์ระบุบันทึกย่อใหม่ --" and not custom_note) else custom_note
                 today_str = datetime.now().strftime('%Y-%m-%d')
                 db.collection("direct_transactions").add({
                     "date": today_str,
                     "category": final_category,
                     "amount": amount_direct,
-                    "note": final_note.strip() if final_note else "",
+                    "note": note_direct.strip() if note_direct else "",
                     "timestamp": firestore.SERVER_TIMESTAMP
                 })
                 st.success(f"บันทึกจ่าย [{final_category}] ฿{amount_direct} เรียบร้อย!")
@@ -372,7 +380,6 @@ with tab2:
             else:
                 st.warning("กรุณาระบุประเภทค่าใช้จ่ายหลัก")
 
-# --- TAB 3: ฝาก/ถอน/รายรับ (รองรับประเภทใหม่) ---
 with tab3:
     existing_inc_categories = get_income_categories()
     inc_options = ["-- พิมพ์ระบุประเภทใหม่ --"] + existing_inc_categories
@@ -384,11 +391,7 @@ with tab3:
         custom_inc_type_input = st.text_input("ระบุประเภทรายการเงินใหม่:", placeholder="เช่น เงินคืนภาษี, โบนัส")
 
     with st.form("income_form", clear_on_submit=True):
-        past_notes_inc = get_past_direct_notes()
-        options_inc = ["-- พิมพ์ระบุบันทึกย่อใหม่ --"] + past_notes_inc
-        selected_inc_note = st.selectbox("เลือกบันทึกย่อเดิม (ถ้ามี):", options=options_inc, index=0)
-        custom_inc_note = st.text_input("ระบุบันทึกย่อใหม่:", placeholder="เช่น รายรับเสริม, ออมเงิน")
-        
+        note_income = st.text_input("ระบุบันทึกย่อ (ถ้ามี):", placeholder="เช่น รายรับเสริม, ออมเงินประจำเดือน")
         amount_income = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=1.0, key="income_amt")
         submit_income = st.form_submit_button("💵 ประมวลผลธุรกรรมเงิน")
         
@@ -396,10 +399,9 @@ with tab3:
             income_type = custom_inc_type_input.strip() if selected_inc_opt == "-- พิมพ์ระบุประเภทใหม่ --" else selected_inc_opt
             
             if income_type:
-                final_inc_note = selected_inc_note if (selected_inc_note != "-- พิมพ์ระบุบันทึกย่อใหม่ --" and not custom_inc_note) else custom_inc_note
                 today_str = datetime.now().strftime('%Y-%m-%d')
+                final_note = note_income.strip() if note_income else ""
                 
-                # ระบบจัดการอัตโนมัติตาม Keyword ประเภทรายการ
                 if "ฝากเงินเก็บ (หักจากยอดเงินปัจจุบัน)" in income_type:
                     if bank_balance >= amount_income:
                         db.collection("account").document("main_wallet").update({"savings": current_savings + amount_income})
@@ -407,7 +409,7 @@ with tab3:
                             "date": today_str,
                             "category": "ฝากเงินเก็บ (หักจากบัญชีหลัก)",
                             "amount": amount_income,
-                            "note": final_inc_note.strip() if final_inc_note else "",
+                            "note": final_note,
                             "timestamp": firestore.SERVER_TIMESTAMP
                         })
                         st.success(f"โอนเงิน ฿{amount_income} เข้าดัชนีเงินเก็บแล้ว!")
@@ -421,7 +423,7 @@ with tab3:
                             "date": today_str,
                             "category": "ฝากเงินเก็บ (หักจากเงินรายวัน)",
                             "amount": amount_income,
-                            "note": final_inc_note.strip() if final_inc_note else "",
+                            "note": final_note,
                             "timestamp": firestore.SERVER_TIMESTAMP
                         })
                         st.success(f"ย้ายโควตา ฿{amount_income} ไปยังเงินเก็บแล้ว!")
@@ -435,7 +437,7 @@ with tab3:
                             "date": today_str,
                             "category": "ถอนเงินเก็บกลับเข้าบัญชี",
                             "amount": -amount_income,
-                            "note": final_inc_note.strip() if final_inc_note else "",
+                            "note": final_note,
                             "timestamp": firestore.SERVER_TIMESTAMP
                         })
                         st.success(f"ดึงสภาพคล่อง ฿{amount_income} กลับเข้าบัญชีหลัก!")
@@ -443,13 +445,12 @@ with tab3:
                         st.error("ยอดเงินเก็บมีไม่เพียงพอสำหรับการถอน")
                 
                 else:
-                    # กรณีเป็นเงินรับ/เงินเดือน/รายรับที่พิมพ์เพิ่มมาเอง
                     add_income_to_bank(amount_income)
                     db.collection("income_history").add({
                         "date": today_str,
                         "type": income_type,
                         "amount": amount_income,
-                        "note": final_inc_note.strip() if final_inc_note else "",
+                        "note": final_note,
                         "timestamp": firestore.SERVER_TIMESTAMP
                     })
                     st.success(f"บันทึกรายรับ [{income_type}] ฿{amount_income} เข้าสู่พอร์ตแล้ว!")
