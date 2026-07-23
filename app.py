@@ -88,7 +88,7 @@ def init_account():
         db.collection("rate_history").add({
             "start_date": "2026-07-16",
             "daily_rate": 100.0,
-            "created_at": datetime.now()
+            "created_at": datetime.now().isoformat()
         })
 
 init_account()
@@ -110,14 +110,14 @@ def add_income_to_bank(amount):
     })
 
 def set_new_daily_rate(start_date_str, new_rate):
-    # บันทึกค่าใหม่พร้อม Timestamp ปัจจุบัน
+    # บันทึกเป็น ISO String เสมอเพื่อป้องกันประเภทข้อมูลขัดแย้ง
     db.collection("rate_history").add({
         "start_date": start_date_str,
         "daily_rate": float(new_rate),
-        "created_at": datetime.now()
+        "created_at": datetime.now().isoformat()
     })
 
-# 🎯 ปรับปรุงฟังก์ชันคำนวณ Rate ใหม่ (ชัวร์ 100% ว่าดึงตัวล่าสุดเสมอ)
+# 🎯 ปรับปรุงฟังก์ชันคำนวณ Rate แก้ไขปัญหา TypeError 100%
 def calculate_total_allocated(system_start_date_str):
     rates_docs = db.collection("rate_history").stream()
     rates_list = []
@@ -125,25 +125,43 @@ def calculate_total_allocated(system_start_date_str):
     for doc in rates_docs:
         d = doc.to_dict()
         if "start_date" in d and "daily_rate" in d:
-            s_date = datetime.strptime(str(d["start_date"]), "%Y-%m-%d").date()
-            # รองรับกรณีที่ไม่มี created_at ในเอกสารเก่า
-            created_at = d.get("created_at", datetime(2020, 1, 1))
+            try:
+                s_date = datetime.strptime(str(d["start_date"]), "%Y-%m-%d").date()
+            except Exception:
+                continue
+
+            # แปลง created_at / timestamp ทุกรูปแบบให้อยู่ในรูป timestamp (float) เดียวกัน
+            raw_created = d.get("created_at") or d.get("timestamp")
+            ts = 0.0
+            if raw_created:
+                if isinstance(raw_created, datetime):
+                    ts = raw_created.timestamp()
+                elif isinstance(raw_created, str):
+                    try:
+                        ts = datetime.fromisoformat(raw_created).timestamp()
+                    except Exception:
+                        ts = 0.0
+                elif hasattr(raw_created, 'timestamp'): # สำหรับ Firestore DatetimeWithNanoseconds
+                    try:
+                        ts = raw_created.timestamp()
+                    except Exception:
+                        ts = 0.0
+
             rates_list.append({
                 "start_date": s_date,
                 "rate": float(d["daily_rate"]),
-                "created_at": created_at
+                "ts": ts
             })
     
     if not rates_list:
-        rates_list = [{"start_date": datetime.strptime(system_start_date_str, "%Y-%m-%d").date(), "rate": 100.0, "created_at": datetime.now()}]
+        rates_list = [{"start_date": datetime.strptime(system_start_date_str, "%Y-%m-%d").date(), "rate": 100.0, "ts": 0.0}]
     
-    # 1. เรียงลำดับตามวันที่เริ่มใช้ + Timestamp ล่าสุด
-    rates_list.sort(key=lambda x: (x["start_date"], x["created_at"]))
+    # Sort ปลอดภัยด้วย tuple ของ (date, float) ชนิดข้อมูลไม่ตีกันแน่นอน
+    rates_list.sort(key=lambda x: (x["start_date"], x["ts"]))
     
     today = date.today()
     system_start = datetime.strptime(system_start_date_str, "%Y-%m-%d").date()
     
-    # 2. หา Rate ที่มีผล ณ วันนี้ (เลือกอันที่อัปเดตล่าสุด)
     current_active_rate = rates_list[0]["rate"]
     for r in rates_list:
         if today >= r["start_date"]:
@@ -152,7 +170,6 @@ def calculate_total_allocated(system_start_date_str):
     if today < system_start:
         return 0.0, current_active_rate
 
-    # 3. คำนวณยอดเงินสะสมทั้งหมด
     total_allocated = 0.0
     current_eval_date = system_start
     
@@ -389,7 +406,7 @@ with tab3:
             
             st.rerun()
 
-# 🎯 --- TAB 4: แก้ไขใหม่แบบแยก Form ไม่ใช้ st.form เพื่อความชัวร์ 100% ---
+# TAB 4: ปรับเปลี่ยนอัตราเงินรายวัน
 with tab4:
     st.write("⚙️ **ปรับเปลี่ยนอัตราจัดสรรเงินรายวัน**")
     st.caption("การปรับเปลี่ยนจะมีผลเริ่มตั้งแต่วันที่ระบุเป็นต้นไป")
@@ -399,9 +416,7 @@ with tab4:
     
     if st.button("⚙️ บันทึกอัตราเงินรายวันใหม่"):
         if val_rate > 0:
-            # 1. บันทึกลง Firebase
             set_new_daily_rate(effective_date.strftime('%Y-%m-%d'), val_rate)
-            # 2. แจ้งเตือน + Rerun
             st.success(f"อัปเดตอัตราเป็น ฿{val_rate:,.0f}/วัน เรียบร้อยแล้ว!")
             st.rerun()
         else:
