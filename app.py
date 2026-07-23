@@ -7,7 +7,7 @@ import pandas as pd
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ
 st.set_page_config(page_title="FinTrack Ticker", page_icon="📈", layout="centered")
 
-# 🎯 เสริม CSS สไตล์กระดานหุ้นไทย
+# 🎯 เสริม CSS สไตล์กระดานหุ้นไทย (ตัววิ่งวนลูปต่อเนื่องไร้รอยต่อ Seamless Loop)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap');
@@ -16,6 +16,7 @@ st.markdown("""
         font-family: 'IBM Plex Sans Thai', sans-serif !important;
     }
 
+    /* แอนิเมชันสำหรับข้อความวิ่งวนลูปต่อเนื่อง */
     @keyframes ticker-infinite {
         0% { transform: translate3d(0, 0, 0); }
         100% { transform: translate3d(-50%, 0, 0); }
@@ -23,6 +24,7 @@ st.markdown("""
     
     .main { background-color: #0b0e14; }
     
+    /* แถบกระดานหุ้นแบบวนต่อเนื่อง */
     .ticker-wrap {
         width: 100%; background-color: #161a25;
         overflow: hidden; padding: 10px 0;
@@ -31,6 +33,7 @@ st.markdown("""
         display: flex;
     }
     
+    /* กล่องข้อความแฝดที่วิ่งต่อท้ายกันตลอดเวลา */
     .ticker-content {
         display: inline-block;
         white-space: nowrap;
@@ -39,6 +42,7 @@ st.markdown("""
         font-weight: 600; font-size: 15px;
     }
     
+    /* กล่องการ์ดหลักสไตล์ Dashboard หุ้น */
     .stock-card {
         background: #161a25; border: 1px solid #232936;
         padding: 20px; border-radius: 12px; margin-bottom: 15px;
@@ -65,7 +69,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. เชื่อมต่อ Firebase
+# 2. เชื่อมต่อ Firebase NoSQL (Firestore) ผ่าน Secrets
 if not firebase_admin._apps:
     cred_json = dict(st.secrets["FIREBASE_CREDENTIALS"])
     cred = credentials.Certificate(cred_json)
@@ -73,7 +77,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# 3. ฟังก์ชันจัดการข้อมูล
+# 3. ฟังก์ชันจัดการข้อมูล (NoSQL Firestore API)
 def init_account():
     doc_ref = db.collection("account").document("main_wallet")
     if not doc_ref.get().exists:
@@ -83,6 +87,7 @@ def init_account():
             "start_date": "2026-07-16"
         })
     
+    # สร้างประวัติ rate เริ่มต้นถ้ายังไม่มีในฐานข้อมูล
     history_ref = list(db.collection("rate_history").limit(1).stream())
     if len(history_ref) == 0:
         db.collection("rate_history").add({
@@ -131,11 +136,13 @@ def calculate_total_allocated(system_start_date_str):
     if not rates_list:
         rates_list = [{"start_date": datetime.strptime(system_start_date_str, "%Y-%m-%d").date(), "rate": 100.0}]
     
+    # เรียงลำดับตามวันที่เริ่มใช้อัตรานั้นๆ
     rates_list.sort(key=lambda x: x["start_date"])
     
     today = date.today()
     system_start = datetime.strptime(system_start_date_str, "%Y-%m-%d").date()
     
+    # ดึง Rate ล่าสุดที่มีผลถึงวันนี้
     current_active_rate = rates_list[0]["rate"]
     for r in rates_list:
         if today >= r["start_date"]:
@@ -144,6 +151,7 @@ def calculate_total_allocated(system_start_date_str):
     if today < system_start:
         return 0.0, current_active_rate
 
+    # คำนวณยอดเงินจัดสรรสะสมแยกตามช่วงเวลาจริงในประวัติ
     total_allocated = 0.0
     current_eval_date = system_start
     
@@ -160,16 +168,21 @@ def calculate_total_allocated(system_start_date_str):
 def calculate_finances():
     initial_bank, current_savings, start_date_str = get_account_data()
     
+    # 1. คำนวณยอดเงินที่ถูกตัดจัดสรรรายวันสะสมทั้งหมด
     total_auto_allocated, current_rate = calculate_total_allocated(start_date_str)
     
+    # 2. คำนวณยอดเงินใช้จ่ายกินใช้รายวัน
     docs_daily = db.collection("daily_transactions").where("date", ">=", start_date_str).stream()
     total_daily_spent = sum([doc.to_dict().get('amount', 0.0) for doc in docs_daily])
     
+    # 3. คำนวณยอดที่ย้ายจากงบรายวันไปเข้าเงินเก็บ
     docs_moved = db.collection("direct_transactions").where("category", "==", "ฝากเงินเก็บ (หักจากเงินรายวัน)").stream()
     total_daily_moved = sum([doc.to_dict().get('amount', 0.0) for doc in docs_moved])
     
+    # 📱 กระเป๋ารายวันสะสมคงเหลือ (โควตาตั้งไว้ - จ่ายจริง - ย้ายไปเก็บ)
     daily_wallet_balance = total_auto_allocated - total_daily_spent - total_daily_moved
     
+    # 4. รายการตัดจ่ายจากบัญชีหลักโดยตรง
     docs_direct = db.collection("direct_transactions").stream()
     total_direct_spent = 0
     for doc in docs_direct:
@@ -177,6 +190,7 @@ def calculate_finances():
         if d.get("category") != "ฝากเงินเก็บ (หักจากเงินรายวัน)":
             total_direct_spent += d.get('amount', 0.0)
             
+    # 💵 คำนวณบัญชีหลัก (CURRENT CASH) แบบสมดุลสมบูรณ์
     if daily_wallet_balance < 0:
         actual_bank_balance = initial_bank - (total_daily_spent + total_daily_moved) - total_direct_spent
     else:
@@ -202,9 +216,10 @@ def get_past_direct_notes():
             past_notes.add(note.strip())
     return sorted(list(past_notes))
 
-# 4. แสดงผล Dashboard
+# 4. ส่วนคำนวณเงินและจัดฟอร์แมตข้อมูล
 bank_balance, daily_wallet, current_savings, start_date_str, current_rate = calculate_finances()
 
+# 📈 จัดคำข้อความวิ่งภาษาไทย
 daily_status = f"▲ คงเหลือ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ ติดลบ {daily_wallet:,.2f}"
 single_ticker = f"• โควตาจัดสรร: ฿{current_rate:,.0f}/วัน &nbsp;&nbsp;&nbsp;&nbsp; • กระเป๋ารายวันสะสม: {daily_status} บาท &nbsp;&nbsp;&nbsp;&nbsp; • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • ยอดเงินเก็บออม: ฿{current_savings:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • สถานะระบบ: เปิดทำงานปกติ 🟢 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
 
@@ -222,6 +237,7 @@ st.markdown(f"""
 st.title("📈 FinTrack Terminal")
 st.caption(f"ระบบมอนิเตอร์และบริหารกระเป๋าเงินดิจิทัล (อัตราจัดสรรปัจจุบัน: ฿{current_rate:,.0f}/วัน)")
 
+# 📊 กล่อง Dashboard แสดงผล
 if daily_wallet >= 0:
     st.markdown(f"""
         <div class="stock-card">
@@ -255,10 +271,11 @@ with col2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 5. ฟอร์มบันทึกข้อมูล
+# 5. ส่วนฟอร์มบันทึกข้อมูลและตั้งค่า
 st.subheader("➕ บันทึกธุรกรรมใหม่ (Execute Order)")
 tab1, tab2, tab3, tab4 = st.tabs(["🛒 บันทึกรายวัน", "💳 หักบัญชีหลักโดยตรง", "💰 ฝาก/ถอน/รายรับ", "⚙️ ตั้งค่าเงินรายวัน"])
 
+# --- TAB 1: บันทึกรายวัน ---
 with tab1:
     with st.form("daily_form", clear_on_submit=True):
         st.write("📝 **รายละเอียดรายการ**")
@@ -284,6 +301,7 @@ with tab1:
             else:
                 st.warning("กรุณาระบุรายละเอียดรายการ")
 
+# --- TAB 2: หักบัญชีหลักโดยตรง ---
 with tab2:
     with st.form("direct_form", clear_on_submit=True):
         category = st.selectbox("ประเภทค่าใช้จ่ายหลัก", ["ค่าน้ำมัน", "ค่าเน็ต", "ค่าผ่อนของ", "ให้แฟน", "อื่นๆ"])
@@ -308,6 +326,7 @@ with tab2:
             st.success(f"บันทึกจ่าย {category} ฿{amount_direct} เรียบร้อย!")
             st.rerun()
 
+# --- TAB 3: ฝาก/ถอน/รายรับ ---
 with tab3:
     with st.form("income_form", clear_on_submit=True):
         income_type = st.selectbox(
@@ -380,26 +399,33 @@ with tab3:
             
             st.rerun()
 
+# --- TAB 4: ปรับเปลี่ยนอัตราเงินรายวัน ---
 with tab4:
+    st.write("⚙️ **ปรับเปลี่ยนอัตราจัดสรรเงินรายวัน**")
+    st.caption("การปรับเปลี่ยนจะมีผลเริ่มตั้งแต่วันที่ระบุเป็นต้นไป")
+    
     with st.form("rate_setting_form"):
-        st.write("⚙️ **ปรับเปลี่ยนอัตราจัดสรรเงินรายวัน**")
-        st.caption("การปรับเปลี่ยนจะมีผลเริ่มตั้งแต่วันที่ระบุเป็นต้นไป")
-        
         effective_date = st.date_input("วันที่เริ่มใช้อัตราใหม่", value=date.today())
+        
+        # 🎯 ปรับปรุงจุดนี้: ใช้ key ชัดเจน ไม่ให้ Streamlit รีเซ็ตค่าทับ
         new_rate = st.number_input(
             "อัตราเงินจัดสรรใหม่ (บาท/วัน)", 
             min_value=1.0, 
-            value=float(current_rate), 
-            step=10.0
+            step=10.0,
+            key="input_new_rate"
         )
         
         submit_rate = st.form_submit_button("⚙️ บันทึกอัตราเงินรายวันใหม่")
+        
         if submit_rate:
-            set_new_daily_rate(effective_date.strftime('%Y-%m-%d'), new_rate)
-            st.success(f"ตั้งค่าอัตราใหม่ ฿{new_rate:,.0f}/วัน เริ่มวันที่ {effective_date.strftime('%Y-%m-%d')} สำเร็จ!")
-            st.rerun()
+            if new_rate > 0:
+                set_new_daily_rate(effective_date.strftime('%Y-%m-%d'), new_rate)
+                st.success(f"ตั้งค่าอัตราใหม่ ฿{new_rate:,.0f}/วัน เริ่มวันที่ {effective_date.strftime('%Y-%m-%d')} สำเร็จ!")
+                st.rerun()
+            else:
+                st.warning("กรุณาระบุจำนวนเงินที่มากกว่า 0")
 
-# 6. ประวัติรายการ
+# 6. ส่วนการแสดงประวัติรายการ
 st.markdown("---")
 st.subheader("🕒 ประวัติการทำรายการย้อนหลัง")
 
