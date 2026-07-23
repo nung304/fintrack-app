@@ -163,16 +163,21 @@ def calculate_total_allocated(system_start_date_str):
 def calculate_finances():
     initial_bank, current_savings, start_date_str = get_account_data()
     
+    # 1. คำนวณยอดเงินที่ถูกตัดจัดสรรรายวันสะสมทั้งหมด
     total_auto_allocated, current_rate = calculate_total_allocated(start_date_str)
     
+    # 2. คำนวณยอดเงินใช้จ่ายกินใช้รายวัน
     docs_daily = db.collection("daily_transactions").where("date", ">=", start_date_str).stream()
     total_daily_spent = sum([doc.to_dict().get('amount', 0.0) for doc in docs_daily])
     
+    # 3. คำนวณยอดที่ย้ายจากงบรายวันไปเข้าเงินเก็บ
     docs_moved = db.collection("direct_transactions").where("category", "==", "ฝากเงินเก็บ (หักจากเงินรายวัน)").stream()
     total_daily_moved = sum([doc.to_dict().get('amount', 0.0) for doc in docs_moved])
     
+    # 📱 กระเป๋ารายวันสะสมคงเหลือ (โควตาตั้งไว้ - จ่ายจริง - ย้ายไปเก็บ)
     daily_wallet_balance = total_auto_allocated - total_daily_spent - total_daily_moved
     
+    # 4. รายการตัดจ่ายจากบัญชีหลักโดยตรง
     docs_direct = db.collection("direct_transactions").stream()
     total_direct_spent = 0
     for doc in docs_direct:
@@ -180,7 +185,9 @@ def calculate_finances():
         if d.get("category") != "ฝากเงินเก็บ (หักจากเงินรายวัน)":
             total_direct_spent += d.get('amount', 0.0)
             
-    # คำนวณรักษาสมดุลบัญชีหลัก ( Double-Entry Balance )
+    # 💵 คำนวณบัญชีหลัก (CURRENT CASH) แบบสมดุลสมบูรณ์:
+    # เงินในบัญชีหลักจะถูกตัดลดลงทันทีเท่ากับยอดที่ถูกย้ายไปตั้งเป็นงบรายวันสะสม (total_auto_allocated)
+    # ถ้างบรายวันใช้เกิน (ติดลบ) ยอดส่วนเกินจะวิ่งมาตัดเพิ่มจากบัญชีหลักทันที
     if daily_wallet_balance < 0:
         actual_bank_balance = initial_bank - (total_daily_spent + total_daily_moved) - total_direct_spent
     else:
