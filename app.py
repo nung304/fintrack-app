@@ -7,7 +7,7 @@ import pandas as pd
 # 1. ตั้งค่าหน้าเว็บให้รองรับการแสดงผลบนมือถือ
 st.set_page_config(page_title="FinTrack Ticker", page_icon="📈", layout="centered")
 
-# 🎯 เสริม CSS สไตล์กระดานหุ้นไทย
+# 🎯 เสริม CSS สไตล์กระดานหุ้นไทย (ตัววิ่งวนลูปต่อเนื่องไร้รอยต่อ Seamless Loop)
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&display=swap');
@@ -16,6 +16,7 @@ st.markdown("""
         font-family: 'IBM Plex Sans Thai', sans-serif !important;
     }
 
+    /* แอนิเมชันสำหรับข้อความวิ่งวนลูปต่อเนื่อง */
     @keyframes ticker-infinite {
         0% { transform: translate3d(0, 0, 0); }
         100% { transform: translate3d(-50%, 0, 0); }
@@ -23,6 +24,7 @@ st.markdown("""
     
     .main { background-color: #0b0e14; }
     
+    /* แถบกระดานหุ้นแบบวนต่อเนื่อง */
     .ticker-wrap {
         width: 100%; background-color: #161a25;
         overflow: hidden; padding: 10px 0;
@@ -31,6 +33,7 @@ st.markdown("""
         display: flex;
     }
     
+    /* กล่องข้อความแฝดที่วิ่งต่อท้ายกันตลอดเวลา */
     .ticker-content {
         display: inline-block;
         white-space: nowrap;
@@ -39,6 +42,7 @@ st.markdown("""
         font-weight: 600; font-size: 15px;
     }
     
+    /* กล่องการ์ดหลักสไตล์ Dashboard หุ้น */
     .stock-card {
         background: #161a25; border: 1px solid #232936;
         padding: 20px; border-radius: 12px; margin-bottom: 15px;
@@ -83,7 +87,7 @@ def init_account():
             "start_date": "2026-07-16"
         })
     
-    # สร้างประวัติ rate เริ่มต้นถ้ายังไม่มี
+    # สร้างประวัติ rate เริ่มต้นถ้ายังไม่มีในฐานข้อมูล
     history_ref = db.collection("rate_history").get()
     if len(history_ref) == 0:
         db.collection("rate_history").add({
@@ -118,7 +122,7 @@ def set_new_daily_rate(start_date_str, new_rate):
     })
 
 def calculate_total_allocated(system_start_date_str):
-    # ดึงประวัติ rate ทั้งหมดและเรียงลำดับตามวันที่
+    # ดึงประวัติอัตราเงินรายวันทั้งหมดมาจัดเรียงตามลำดับวันที่
     rates_docs = db.collection("rate_history").stream()
     rates_list = []
     for doc in rates_docs:
@@ -139,12 +143,11 @@ def calculate_total_allocated(system_start_date_str):
     if today < system_start:
         return 0.0, rates_list[-1]["rate"]
 
-    # คำนวณยอดเงินจัดสรรแบบสะสมตามช่วงเวลาจริง
+    # คำนวณยอดเงินจัดสรรสะสมแยกตามช่วงเวลาจริงในประวัติ
     total_allocated = 0.0
     current_eval_date = system_start
     
     while current_eval_date <= today:
-        # หาอัตรา daily_rate ของวันที่คำนวณอยู่
         active_rate = rates_list[0]["rate"]
         for r in rates_list:
             if current_eval_date >= r["start_date"]:
@@ -177,6 +180,7 @@ def calculate_finances():
         if d.get("category") != "ฝากเงินเก็บ (หักจากเงินรายวัน)":
             total_direct_spent += d.get('amount', 0.0)
             
+    # คำนวณรักษาสมดุลบัญชีหลัก ( Double-Entry Balance )
     if daily_wallet_balance < 0:
         actual_bank_balance = initial_bank - (total_daily_spent + total_daily_moved) - total_direct_spent
     else:
@@ -184,6 +188,7 @@ def calculate_finances():
     
     return actual_bank_balance, daily_wallet_balance, current_savings, start_date_str, current_rate
 
+# ฟังก์ชันดึงประวัติข้อความ/รายการย่อจาก Firebase
 def get_past_descriptions():
     docs = db.collection("daily_transactions").stream()
     past_items = set()
@@ -198,7 +203,7 @@ def get_past_direct_notes():
     past_notes = set()
     for doc in docs:
         note = doc.to_dict().get("note")
-        if note:
+        if note and note.strip():
             past_notes.add(note.strip())
     return sorted(list(past_notes))
 
@@ -207,8 +212,9 @@ bank_balance, daily_wallet, current_savings, start_date_str, current_rate = calc
 
 # 📈 จัดคำข้อความวิ่งภาษาไทย
 daily_status = f"▲ คงเหลือ +{daily_wallet:,.2f}" if daily_wallet >= 0 else f"▼ ติดลบ {daily_wallet:,.2f}"
-single_ticker = f"• โควตาปัจจุบัน: ฿{current_rate:,.0f}/วัน &nbsp;&nbsp;&nbsp;&nbsp; • กระเป๋ารายวันสะสม: {daily_status} บาท &nbsp;&nbsp;&nbsp;&nbsp; • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • ยอดเงินเก็บออม: ฿{current_savings:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • สถานะระบบ: เปิดทำงานปกติ 🟢 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+single_ticker = f"• โควตาจัดสรร: ฿{current_rate:,.0f}/วัน &nbsp;&nbsp;&nbsp;&nbsp; • กระเป๋ารายวันสะสม: {daily_status} บาท &nbsp;&nbsp;&nbsp;&nbsp; • บัญชีหลักปัจจุบัน: ฿{bank_balance:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • ยอดเงินเก็บออม: ฿{current_savings:,.2f} &nbsp;&nbsp;&nbsp;&nbsp; • สถานะระบบ: เปิดทำงานปกติ 🟢 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
 
+# ข้อความวิ่งวนลูปแบบไร้รอยต่อ (Seamless Loop)
 st.markdown(f"""
     <div class="ticker-wrap">
         <div class="ticker-content { 'ticker-green' if daily_wallet >= 0 else 'ticker-red' }">
@@ -223,7 +229,7 @@ st.markdown(f"""
 st.title("📈 FinTrack Terminal")
 st.caption(f"ระบบมอนิเตอร์และบริหารกระเป๋าเงินดิจิทัล (อัตราจัดสรรปัจจุบัน: ฿{current_rate:,.0f}/วัน)")
 
-# 📊 กล่อง Dashboard
+# 📊 กล่อง Dashboard แสดงผล
 if daily_wallet >= 0:
     st.markdown(f"""
         <div class="stock-card">
@@ -292,7 +298,7 @@ with tab2:
     with st.form("direct_form", clear_on_submit=True):
         category = st.selectbox("ประเภทค่าใช้จ่ายหลัก", ["ค่าน้ำมัน", "ค่าเน็ต", "ค่าผ่อนของ", "ให้แฟน", "อื่นๆ"])
         
-        # เพิ่มระบบเลือกประวัติบันทึกย่อเดิม
+        # ระบบเลือกประวัติบันทึกย่อเดิม
         past_notes = get_past_direct_notes()
         options_note = ["-- พิมพ์ระบุบันทึกย่อใหม่ --"] + past_notes
         selected_note = st.selectbox("เลือกบันทึกย่อเดิม (ถ้ามี):", options=options_note, index=0)
@@ -328,7 +334,7 @@ with tab3:
             ]
         )
         
-        # เพิ่มระบบเลือกประวัติบันทึกย่อเดิม
+        # ระบบเลือกประวัติบันทึกย่อเดิม
         past_notes_inc = get_past_direct_notes()
         options_inc = ["-- พิมพ์ระบุบันทึกย่อใหม่ --"] + past_notes_inc
         selected_inc_note = st.selectbox("เลือกบันทึกย่อเดิม (ถ้ามี):", options=options_inc, index=0)
